@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>W-2 Vision Extractor</title>
+    <link rel="stylesheet" href="/css/styles.css"/>
+</head>
+<body>
+<main class="container">
+    <header class="header">
+        <h1>📄 W-2 Vision Extractor</h1>
+        <p class="subtitle">Extract tax information from W-2 forms using AI-powered vision technology</p>
+    </header>
+
+    <div id="progressBar" class="progress-bar">
+        <div class="progress-content">
+            <div class="spinner"></div>
+            <p>Processing your W-2 forms...</p>
+            <div class="progress-line"></div>
+        </div>
+    </div>
+
+    <div class="upload-forms">
+        <form id="singleUploadForm" method="POST" action="/upload" enctype="multipart/form-data" class="upload-form">
+            <h3>📎 Single File Upload</h3>
+            <label for="single-file" class="file-label">
+                <input type="file" id="single-file" name="file" accept="application/pdf,image/*" required/>
+            </label>
+            <button type="submit">🚀 Upload & Extract</button>
+        </form>
+
+        <form id="multiUploadForm" method="POST" action="/upload-multi" enctype="multipart/form-data" class="upload-form">
+            <h3>📎 Multiple Files Upload</h3>
+            <label for="multi-files" class="file-label">
+                <input type="file" id="multi-files" name="files" accept="application/pdf,image/*" multiple required/>
+            </label>
+            <button type="submit">🚀 Upload & Extract All</button>
+        </form>
+    </div>
+
+    <section th:if="${table}" class="result">
+        <div class="result-header">
+            <h2>✅ Extracted Data</h2>
+            <a href="/download" class="btn download-btn">⬇️ Download Excel</a>
+        </div>
+
+        <div class="result-cards" th:each="row, i : ${table}">
+            <div class="card">
+                <div class="card-header">
+                    <span class="employee-name" th:text="${row['Employee Name'] != null ? row['Employee Name'] + '''s W-2 Information' : 'Document #' + (i.index + 1)}">Employee's W-2 Information</span>
+                </div>
+
+                <div class="preview-container">
+                    <img class="preview" th:src="${previews[i.index]}" alt="W-2 Form Preview" loading="lazy" onclick="openModal(this.src)"/>
+                </div>
+
+                <div class="data-section">
+                    <h4>Extracted Information</h4>
+                    <table>
+                        <tbody>
+                        <tr th:each="entry : ${row}">
+                            <th th:text="${entry.key}"></th>
+                            <td th:text="${entry.value}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section th:unless="${table}" class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h3>No Data Yet</h3>
+        <p>Upload W-2 forms above to extract and view tax information</p>
+    </section>
+
+    <section th:if="${table}" class="chat-section">
+        <div class="chat-header">
+            <h2>💬 Tax Advisor Chat</h2>
+            <button class="btn summary-btn" onclick="generateSummary()">📝 Generate Summary</button>
+        </div>
+        <div id="chatContainer" class="chat-container">
+            <div class="chat-message assistant">
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">
+                    <p>Hello! I'm your tax advisor. I've reviewed your W-2 forms. To help you better, I'd like to ask a few questions about your tax situation. Let's start: What is your current marital status?</p>
+                </div>
+            </div>
+        </div>
+        <div class="chat-input-container">
+            <textarea id="chatInput" placeholder="Type your message here..." rows="1"></textarea>
+            <button id="sendBtn" onclick="sendMessage()">Send</button>
+        </div>
+    </section>
+</main>
+
+<div id="imageModal" class="modal" onclick="closeModal()">
+    <span class="modal-close">&times;</span>
+    <img class="modal-content" id="modalImage" alt="Magnified W-2 Form">
+    <div class="modal-caption">Click anywhere to close</div>
+</div>
+
+<script>
+    let employeeName = '';
+
+    function showProgress() {
+        document.getElementById('progressBar').style.display = 'flex';
+    }
+
+    function openModal(src) {
+        document.getElementById('imageModal').style.display = 'flex';
+        document.getElementById('modalImage').src = src;
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+        document.getElementById('imageModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    function extractEmployeeName() {
+        const nameElement = document.querySelector('.employee-name');
+        if (nameElement) {
+            const text = nameElement.textContent;
+            employeeName = text.replace("'s W-2 Information", '').trim();
+        }
+    }
+
+    function addMessage(content, isUser) {
+        const container = document.getElementById('chatContainer');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${isUser ? 'user' : 'assistant'}`;
+        messageDiv.innerHTML = `
+            <div class="message-avatar">${isUser ? '👤' : '🤖'}</div>
+            <div class="message-content">
+                <p>${content}</p>
+            </div>
+        `;
+        container.appendChild(messageDiv);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function resetChat() {
+        const container = document.getElementById('chatContainer');
+        if (container) {
+            container.innerHTML = `
+                <div class="chat-message assistant">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        <p>Hello! I'm your tax advisor. I've reviewed your W-2 forms. To help you better, I'd like to ask a few questions about your tax situation. Let's start: What is your current marital status?</p>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('chatInput');
+        const message = input.value.trim();
+        if (!message) return;
+
+        addMessage(message, true);
+        input.value = '';
+        input.style.height = 'auto';
+
+        const sendBtn = document.getElementById('sendBtn');
+        sendBtn.disabled = true;
+        sendBtn.textContent = '...';
+
+        try {
+            const response = await fetch('/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({employeeName: employeeName, question: message})
+            });
+            const data = await response.json();
+            addMessage(data.answer, false);
+        } catch (error) {
+            addMessage('Sorry, there was an error processing your message.', false);
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Send';
+        }
+    }
+
+    async function generateSummary() {
+        const summagesCount = document.querySelectorAll('.chat-message.user').length;
+        if (messagesCount === 0) {
+            alert('Please answer the tax advisor questions before generating a summary.');
+            return;
+        }
+
+        const summaryBtn = document.querySelector('.summary-btn');
+        summaryBtn.disabled = true;
+        summaryBtn.textContent = '⏳ Generating...';
+
+        try {
+            const response = await fetch(`/summary/${encodeURIComponent(employeeName)}`);
+            const data = await response.json();
+            if (data.summary.startsWith('ERROR:')) {
+                alert(data.summary.replace('ERROR: ', ''));
+            } else {
+                addMessage(data.summary, false);
+            }
+        } catch (error) {
+            addMessage('Sorry, there was an error generating the summary.', false);
+        } finally {
+            summaryBtn.disabled = false;
+            summaryBtn.textContent = '📝 Generate Summary';
+        }
+    }
+
+    document.getElementById('chatInput')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    document.getElementById('chatInput')?.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+
+    if (document.querySelector('.employee-name')) {
+        extractEmployeeName();
+        resetChat();
+    }
+
+    // Handle form submissions with page refresh
+    const singleForm = document.getElementById('singleUploadForm');
+    if (singleForm) {
+        singleForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            showProgress();
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json())
+            .then(() => {
+                window.location.href = window.location.href.split('?')[0];
+            }).catch(error => {
+                console.error('Upload error:', error);
+                document.getElementById('progressBar').style.display = 'none';
+                alert('Upload failed. Please try again.');
+            });
+        });
+    }
+
+    const multiForm = document.getElementById('multiUploadForm');
+    if (multiForm) {
+        multiForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            showProgress();
+            
+            fetch('/upload-multi', {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json())
+            .then(() => {
+                window.location.href = window.location.href.split('?')[0];
+            }).catch(error => {
+                console.error('Upload error:', error);
+                document.getElementById('progressBar').style.display = 'none';
+                alert('Upload failed. Please try again.');
+            });
+        });
+    }
+</script>
+</body>
+</html>

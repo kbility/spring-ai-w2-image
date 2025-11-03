@@ -1,0 +1,21 @@
+# Logs
+*.log
+backend.log
+frontend.log
+
+# Build outputs
+backend-w2-image/build/
+backend-w2-image/.gradle/
+frontend/dist/
+frontend/node_modules/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Environment
+.env
