@@ -48,7 +48,8 @@ public class TaxDocumentController {
             Map<String, Object> response = Map.of(
                     "table", TaxDocumentExcelExporter.toTable(documents),
                     "previews", List.of(generatePreview(file)),
-                    "refresh", true
+                    "refresh", true,
+                    "recipientName", result.getRecipient_name() != null ? result.getRecipient_name() : ""
             );
 
             return ResponseEntity.ok(response);
@@ -71,11 +72,15 @@ public class TaxDocumentController {
             List<String> previews = files.stream()
                     .map(this::generatePreviewSafe)
                     .collect(Collectors.toList());
+            
+            String recipientName = results.isEmpty() ? "" : 
+                    (results.get(0).getRecipient_name() != null ? results.get(0).getRecipient_name() : "");
 
             Map<String, Object> response = Map.of(
                     "table", TaxDocumentExcelExporter.toTable(results),
                     "previews", previews,
-                    "refresh", true
+                    "refresh", true,
+                    "recipientName", recipientName
             );
 
             return ResponseEntity.ok(response);
@@ -157,24 +162,47 @@ public class TaxDocumentController {
     @PostMapping("/analyze")
     public ResponseEntity<?> analyze(@RequestBody AnalysisRequest request) {
         try {
-            if (request.getEmployeeName() == null || request.getQuestion() == null) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Employee name and question are required"));
+            System.out.println("[ANALYZE] Received request - employeeName: " + request.getEmployeeName() + ", question: " + request.getQuestion());
+            if (request.getQuestion() == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Question is required"));
             }
 
             String answer = taxDocumentService.chat(request.getEmployeeName(), request.getQuestion());
+            System.out.println("[ANALYZE] Response received successfully");
             return ResponseEntity.ok(Map.of("answer", answer));
         } catch (Exception e) {
+            System.err.println("[ANALYZE] Error occurred: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to analyze: " + e.getMessage()));
         }
     }
 
     @GetMapping("/summary/{employeeName}")
-    public ResponseEntity<?> getSummary(@PathVariable String employeeName) {
+    public ResponseEntity<?> getSummary(@PathVariable(required = false) String employeeName) {
         try {
+            System.out.println("[SUMMARY] Received request with employeeName: " + employeeName);
             String summary = taxDocumentService.generateSummary(employeeName);
+            System.out.println("[SUMMARY] Summary generated successfully");
             return ResponseEntity.ok(Map.of("summary", summary));
         } catch (Exception e) {
+            System.err.println("[SUMMARY] Error occurred: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to generate summary: " + e.getMessage()));
+        }
+    }
+    
+    @GetMapping("/summary")
+    public ResponseEntity<?> getSummaryNoParam() {
+        try {
+            System.out.println("[SUMMARY] Received request with no employeeName");
+            String summary = taxDocumentService.generateSummary(null);
+            System.out.println("[SUMMARY] Summary generated successfully");
+            return ResponseEntity.ok(Map.of("summary", summary));
+        } catch (Exception e) {
+            System.err.println("[SUMMARY] Error occurred: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to generate summary: " + e.getMessage()));
         }

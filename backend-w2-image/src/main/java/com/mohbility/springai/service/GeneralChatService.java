@@ -3,7 +3,6 @@ package com.mohbility.springai.service;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.memory.InMemoryChatMemory;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -13,12 +12,13 @@ public class GeneralChatService {
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
 
-    public GeneralChatService(ChatClient.Builder builder) {
-        this.chatMemory = new InMemoryChatMemory();
+    public GeneralChatService(ChatClient.Builder builder, ChatMemory regularChatMemory) {
+        this.chatMemory = regularChatMemory;
         this.chatClient = builder
-                .defaultAdvisors(new MessageChatMemoryAdvisor(chatMemory))
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
     }
+
 
     public String chat(String message) {
         String systemPrompt = 
@@ -41,13 +41,13 @@ public class GeneralChatService {
         return chatClient.prompt()
                 .system(systemPrompt)
                 .user(message)
-                .advisors(a -> a.param(MessageChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY, CONVERSATION_ID))
+                .advisors(a -> a.param("chat_memory_conversation_id", CONVERSATION_ID))
                 .call()
                 .content();
     }
 
     public String generateSummary() {
-        var messages = chatMemory.get(CONVERSATION_ID, 100);
+        var messages = chatMemory.get(CONVERSATION_ID);
         if (messages.isEmpty()) {
             return "ERROR: Please answer some questions before generating a summary.";
         }
@@ -65,7 +65,7 @@ public class GeneralChatService {
 
         return chatClient.prompt()
                 .user(summaryPrompt)
-                .advisors(a -> a.param(MessageChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY, CONVERSATION_ID))
+                .advisors(a -> a.param("chat_memory_conversation_id", CONVERSATION_ID))
                 .call()
                 .content();
     }

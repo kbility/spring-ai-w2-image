@@ -1,42 +1,54 @@
 package com.mohbility.springai.service;
 
 import com.mohbility.springai.model.TaxDocumentResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.memory.InMemoryChatMemory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
 
 @Service
 public class TaxDocumentChatService {
 
+    private static final Logger log = LoggerFactory.getLogger(TaxDocumentChatService.class);
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
     private final String conversationPrompt;
 
     public TaxDocumentChatService(
             ChatClient.Builder builder,
-            @Value("${openai.conversation-prompt-file}") Resource conversationPromptResource
+            @Value("${openai.conversation-prompt-file}") Resource conversationPromptResource,
+            ChatMemory regularChatMemory
     ) throws IOException {
-        this.chatMemory = new InMemoryChatMemory();
+        this.chatMemory = regularChatMemory;
         this.chatClient = builder
-                .defaultAdvisors(new MessageChatMemoryAdvisor(chatMemory))
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
         this.conversationPrompt = conversationPromptResource.getContentAsString(StandardCharsets.UTF_8);
     }
 
     public String chat(String recipientIdentifier, List<TaxDocumentResult> documents, String message) {
+        log.info("Chat called with recipientIdentifier: {}, documents size: {}, message: {}", 
+                recipientIdentifier, documents != null ? documents.size() : 0, message);
+        
         if (documents == null || documents.isEmpty()) {
+            log.warn("No documents found for recipientIdentifier: {}", recipientIdentifier);
             return "Please upload tax documents first to start the conversation.";
         }
 
-        String recipientName = documents.get(0).getRecipient_name() != null ? documents.get(0).getRecipient_name() : "Taxpayer";
+        String recipientName = documents.get(0).getRecipient_name() != null
+                ? documents.get(0).getRecipient_name()
+                : "Taxpayer";
+        
+        log.info("Recipient name: {}", recipientName);
 
         String systemPrompt = conversationPrompt
                 .replace("{conversation_history}", "")
@@ -52,37 +64,54 @@ public class TaxDocumentChatService {
                 .replace("{additional_info}", "")
                 .replace("{current_message}", "");
 
-        return chatClient.prompt()
-                .system(systemPrompt)
-                .user(message)
-                .advisors(a -> a.param(MessageChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY, recipientIdentifier))
-                .call()
-                .content();
+        try {
+            log.info("Calling ChatClient with recipientIdentifier: {}", recipientIdentifier);
+            String response = chatClient.prompt()
+                    .system(systemPrompt)
+                    .user(message)
+                    .advisors(a -> a.param("chat_memory_conversation_id", recipientIdentifier))
+                    .call()
+                    .content();
+            log.info("ChatClient response received successfully");
+            return response;
+        } catch (Exception e) {
+            log.error("Error in chat method for recipientIdentifier: {}", recipientIdentifier, e);
+            throw e;
+        }
     }
 
     public String generateSummary(String recipientIdentifier, List<TaxDocumentResult> documents) {
-        var messages = chatMemory.get(recipientIdentifier, 100);
+        log.info("generateSummary called with recipientIdentifier: {}, documents size: {}", 
+                recipientIdentifier, documents != null ? documents.size() : 0);
+        
+        var messages = chatMemory.get(recipientIdentifier);
+        log.info("Retrieved {} messages from chat memory for recipientIdentifier: {}", 
+                messages != null ? messages.size() : 0, recipientIdentifier);
+        
         if (messages.isEmpty()) {
+            log.warn("No messages found in chat memory for recipientIdentifier: {}", recipientIdentifier);
             return "ERROR: Please answer the tax advisor questions before generating a summary.";
         }
 
         String summaryPrompt = String.format(
-            "Based on the conversation history, create a professional intake summary narrative.\\n\\n" +
-            "TAX DOCUMENT DATA:\\n%s\\n" +
-            "Total Income: $%.2f\\n" +
-            "Total Federal Tax: $%.2f\\n\\n" +
-            "Generate a professional narrative summary with 3-4 paragraphs covering:\\n\\n" +
-            "Paragraph 1: Marital status, living situation, and dependent information\\n" +
-            "Paragraph 2: Financial support details and who can claim dependents\\n" +
-            "Paragraph 3: Income sources (number of tax documents) and employment/contractor details\\n" +
-            "Paragraph 4 (if applicable): Any additional relevant tax information discussed\\n\\n" +
-            "Write in third person using past tense. Extract all relevant information from the conversation and format as flowing narrative paragraphs.",
-            buildDocumentSummary(documents), calculateTotalIncome(documents), calculateTotalFederalTax(documents)
+                "Based on the conversation history, create a professional intake summary narrative.\n\n" +
+                "TAX DOCUMENT DATA:\n%s\n" +
+                "Total Income: $%.2f\n" +
+                "Total Federal Tax: $%.2f\n\n" +
+                "Generate a professional narrative summary with 3-4 paragraphs covering:\n\n" +
+                "Paragraph 1: Marital status, living situation, and dependent information\n" +
+                "Paragraph 2: Financial support details and who can claim dependents\n" +
+                "Paragraph 3: Income sources (number of tax documents) and employment/contractor details\n" +
+                "Paragraph 4 (if applicable): Any additional relevant tax information discussed\n\n" +
+                "Write in third person using past tense. Extract all relevant information from the conversation and format as flowing narrative paragraphs.",
+                buildDocumentSummary(documents),
+                calculateTotalIncome(documents),
+                calculateTotalFederalTax(documents)
         );
 
         return chatClient.prompt()
                 .user(summaryPrompt)
-                .advisors(a -> a.param(MessageChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY, recipientIdentifier))
+                .advisors(a -> a.param("chat_memory_conversation_id", recipientIdentifier))
                 .call()
                 .content();
     }
@@ -97,15 +126,16 @@ public class TaxDocumentChatService {
         StringBuilder summary = new StringBuilder();
         for (int i = 0; i < documents.size(); i++) {
             TaxDocumentResult doc = documents.get(i);
-            summary.append(String.format("\\nDocument #%d (%s):\\n", i + 1, doc.getDocument_type()));
-            summary.append(String.format("  Payer: %s\\n", doc.getPayer_name() != null ? doc.getPayer_name() : "N/A"));
-            
-            if ("W2".equals(doc.getDocument_type())) {
-                summary.append(String.format("  Wages: $%.2f\\n", doc.getWages_box1() != null ? doc.getWages_box1() : 0.0));
-                summary.append(String.format("  Federal Tax Withheld: $%.2f\\n", doc.getFederal_income_tax_withheld_box2() != null ? doc.getFederal_income_tax_withheld_box2() : 0.0));
-            } else if ("1099-NEC".equals(doc.getDocument_type())) {
-                summary.append(String.format("  Nonemployee Compensation: $%.2f\\n", doc.getNonemployee_compensation_box1() != null ? doc.getNonemployee_compensation_box1() : 0.0));
-                summary.append(String.format("  Federal Tax Withheld: $%.2f\\n", doc.getFederal_income_tax_withheld_box4() != null ? doc.getFederal_income_tax_withheld_box4() : 0.0));
+            String type = doc.getDocument_type();
+            summary.append(String.format("\nDocument #%d (%s):\n", i + 1, type));
+            summary.append(String.format("  Payer: %s\n", doc.getPayer_name() != null ? doc.getPayer_name() : "N/A"));
+
+            if ("W2".equals(type)) {
+                summary.append(String.format("  Wages: $%.2f\n", doc.getWages_box1() != null ? doc.getWages_box1() : 0.0));
+                summary.append(String.format("  Federal Tax Withheld: $%.2f\n", doc.getFederal_income_tax_withheld_box2() != null ? doc.getFederal_income_tax_withheld_box2() : 0.0));
+            } else if ("1099-NEC".equals(type)) {
+                summary.append(String.format("  Nonemployee Compensation: $%.2f\n", doc.getNonemployee_compensation_box1() != null ? doc.getNonemployee_compensation_box1() : 0.0));
+                summary.append(String.format("  Federal Tax Withheld: $%.2f\n", doc.getFederal_income_tax_withheld_box4() != null ? doc.getFederal_income_tax_withheld_box4() : 0.0));
             }
         }
         return summary.toString();
@@ -113,9 +143,10 @@ public class TaxDocumentChatService {
 
     private double calculateTotalIncome(List<TaxDocumentResult> documents) {
         return documents.stream().mapToDouble(doc -> {
-            if ("W2".equals(doc.getDocument_type())) {
+            String type = doc.getDocument_type();
+            if ("W2".equals(type)) {
                 return doc.getWages_box1() != null ? doc.getWages_box1() : 0.0;
-            } else if ("1099-NEC".equals(doc.getDocument_type())) {
+            } else if ("1099-NEC".equals(type)) {
                 return doc.getNonemployee_compensation_box1() != null ? doc.getNonemployee_compensation_box1() : 0.0;
             }
             return 0.0;
@@ -124,9 +155,10 @@ public class TaxDocumentChatService {
 
     private double calculateTotalFederalTax(List<TaxDocumentResult> documents) {
         return documents.stream().mapToDouble(doc -> {
-            if ("W2".equals(doc.getDocument_type())) {
+            String type = doc.getDocument_type();
+            if ("W2".equals(type)) {
                 return doc.getFederal_income_tax_withheld_box2() != null ? doc.getFederal_income_tax_withheld_box2() : 0.0;
-            } else if ("1099-NEC".equals(doc.getDocument_type())) {
+            } else if ("1099-NEC".equals(type)) {
                 return doc.getFederal_income_tax_withheld_box4() != null ? doc.getFederal_income_tax_withheld_box4() : 0.0;
             }
             return 0.0;

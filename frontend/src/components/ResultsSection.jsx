@@ -94,7 +94,7 @@ export default function ResultsSection({ results, setModalImage }) {
       </Grid>
 
       <SummaryNotes 
-        employeeName={results.table[0]?.['Employee Name'] || results.table[0]?.['employee_name']} 
+        employeeName={results.recipientName || results.table[0]?.['Employee Name'] || results.table[0]?.['employee_name']} 
         shouldRefresh={shouldRefreshSummary}
         onRefreshComplete={handleSummaryRefreshComplete}
       />
@@ -112,7 +112,7 @@ export default function ResultsSection({ results, setModalImage }) {
           Ask Questions About Employee
         </Typography>
         <W2Chat 
-          employeeName={results.table[0]?.['Employee Name'] || results.table[0]?.['employee_name']} 
+          employeeName={results.recipientName || results.table[0]?.['Employee Name'] || results.table[0]?.['employee_name']} 
           onSummaryGenerated={handleSummaryGenerated}
         />
       </Paper>

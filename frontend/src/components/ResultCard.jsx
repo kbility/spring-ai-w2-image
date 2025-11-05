@@ -2,7 +2,7 @@ import { Paper, Box, Typography, Table, TableBody, TableRow, TableCell, Chip } f
 import { Person } from '@mui/icons-material';
 
 export default function ResultCard({ row, preview, index, setModalImage }) {
-  const employeeName = row['Employee Name'] || row['employee_name'];
+  const employeeName = row['Recipient Name'] || row['recipient_name'] || row['Employee Name'] || row['employee_name'];
   const title = employeeName || `Document #${index + 1}`;
 
   return (
@@ -60,7 +60,7 @@ export default function ResultCard({ row, preview, index, setModalImage }) {
       >
         <img 
           src={preview} 
-          alt="W-2 Preview" 
+          alt="Tax Document Preview" 
           style={{ 
             maxWidth: '100%', 
             height: 'auto',

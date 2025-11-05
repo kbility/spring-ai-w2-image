@@ -1,7 +1,7 @@
 import { Box, Typography, Button, Paper } from '@mui/material';
-import { Description, Chat, Security, Speed, Psychology } from '@mui/icons-material';
+import { Description, Chat, Security, Speed, Psychology, Search } from '@mui/icons-material';
 
-export default function WelcomePage({ onHasW2, onNoW2 }) {
+export default function WelcomePage({ onHasW2, onNoW2, onQueryIRS }) {
   return (
     <Box sx={{ textAlign: 'center', py: 4 }}>
       <Box sx={{ mb: 4 }}>
@@ -169,6 +169,34 @@ export default function WelcomePage({ onHasW2, onNoW2 }) {
             }}
           >
             Ask Tax Questions
+          </Button>
+
+          <Button
+            variant="outlined"
+            size="large"
+            startIcon={<Search sx={{ fontSize: 28 }} />}
+            onClick={onQueryIRS}
+            sx={{
+              py: 3,
+              px: 6,
+              fontSize: '1.15rem',
+              fontWeight: 700,
+              minWidth: 260,
+              borderWidth: 3,
+              borderRadius: 3,
+              borderColor: '#ff9800',
+              color: '#ff9800',
+              '&:hover': {
+                borderWidth: 3,
+                bgcolor: '#fff3e0',
+                borderColor: '#f57c00',
+                transform: 'translateY(-4px)',
+                boxShadow: '0 8px 20px rgba(255,152,0,0.2)',
+              },
+              transition: 'all 0.3s ease'
+            }}
+          >
+            Query IRS 2025
           </Button>
         </Box>
       </Paper>

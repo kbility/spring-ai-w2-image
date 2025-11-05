@@ -6,6 +6,7 @@ import WelcomePage from './components/WelcomePage';
 import UploadForms from './components/UploadForms';
 import ResultsSection from './components/ResultsSection';
 import GeneralTaxChat from './components/GeneralTaxChat';
+import IRSQuery from './components/IRSQuery';
 import ProgressOverlay from './components/ProgressOverlay';
 import ImageModal from './components/ImageModal';
 
@@ -70,7 +71,7 @@ const theme = createTheme({
 });
 
 function App() {
-  const [view, setView] = useState('welcome'); // 'welcome', 'upload', 'chat', 'results'
+  const [view, setView] = useState('welcome'); // 'welcome', 'upload', 'chat', 'results', 'irs'
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [modalImage, setModalImage] = useState(null);
@@ -110,7 +111,8 @@ function App() {
             {view === 'welcome' && (
               <WelcomePage 
                 onHasW2={() => setView('upload')} 
-                onNoW2={() => setView('chat')} 
+                onNoW2={() => setView('chat')}
+                onQueryIRS={() => setView('irs')} 
               />
             )}
             
@@ -133,6 +135,10 @@ function App() {
             
             {view === 'chat' && (
               <GeneralTaxChat onBackToHome={handleBackToHome} />
+            )}
+            
+            {view === 'irs' && (
+              <IRSQuery onBack={handleBackToHome} />
             )}
             
             {view === 'results' && (
